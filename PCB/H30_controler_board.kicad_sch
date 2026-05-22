@@ -7,8 +7,8 @@
 	(title_block
 		(title "Manager for H30 hydrogene stack")
 		(date "2026-04-28")
-		(rev "1.0")
-		(company "H2 ECE Team")
+		(rev "1.1")
+		(company "H2GP ECE Team")
 		(comment 1 "Maxence HEROUX")
 	)
 	(lib_symbols
@@ -29898,7 +29898,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
+		(property "Footprint" "Capacitor_SMD:C_0402_1005Metric"
 			(at 113.03 265.43 0)
 			(effects
 				(font
