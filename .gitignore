@@ -1,0 +1,17 @@
+# Eclipse / CubeIDE
+.cproject
+.project
+.settings/
+.mxproject
+
+# Build
+Debug/
+Release/
+build/
+
+# STM32CubeIDE metadata
+*.launch
+
+# OS files
+.DS_Store
+Thumbs.db
