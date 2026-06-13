@@ -40,7 +40,7 @@
 static char log_buf[100];
 
 #define LOG_TRANSMIT(len) do { \
-  while (CDC_Transmit_FS((uint8_t*)log_buf, (len)) == USBD_BUSY); \
+  CDC_Transmit_FS((uint8_t*)log_buf, (len));\
 } while(0)
 
 #define LOG(fmt, ...) do { \
@@ -111,7 +111,17 @@ static void MX_TIM15_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void PWM_SetFreq(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t freq)
+{
+    uint32_t psc = 79; // timer à 1 MHz
+    uint32_t arr = (1000000 / freq) - 1;
 
+    __HAL_TIM_SET_PRESCALER(htim, psc);
+    __HAL_TIM_SET_AUTORELOAD(htim, arr);
+    __HAL_TIM_SET_COMPARE(htim, channel, arr / 2);
+
+    htim->Instance->EGR = TIM_EGR_UG;
+}
 /* USER CODE END 0 */
 
 /**
@@ -164,26 +174,17 @@ int main(void)
 
   //start sound
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
-
-  uint16_t La = 2271;   // 440 Hz
-  uint16_t Do = 1911;   // 523 Hz
-  uint16_t Mi = 1516;   // 659 Hz
-
-  __HAL_TIM_SET_AUTORELOAD(&htim1, La); // La
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 1135);
-  htim1.Instance->EGR = TIM_EGR_UG;
+  PWM_SetFreq(&htim1,TIM_CHANNEL_3, 523);
   HAL_Delay(300);
-
-  __HAL_TIM_SET_AUTORELOAD(&htim1, Do); // Do
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 955);
-  htim1.Instance->EGR = TIM_EGR_UG;
+  PWM_SetFreq(&htim1,TIM_CHANNEL_3, 440);  // note La
   HAL_Delay(300);
-
-  __HAL_TIM_SET_AUTORELOAD(&htim1, Mi); // Mi
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 758);
-  htim1.Instance->EGR = TIM_EGR_UG;
+  PWM_SetFreq(&htim1,TIM_CHANNEL_3, 659);
   HAL_Delay(300);
   HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3);
+
+//  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+//  PWM_SetFreq(&htim3,TIM_CHANNEL_1, 3);
+
 
   /* USER CODE END 2 */
 
@@ -201,8 +202,9 @@ int main(void)
 	  LOG("Hello World"); //Ctrl + space
 	  LOG_INFO("%d", 20);
 
+	  HAL_GPIO_TogglePin(EV_GPIO_Port, EV_Pin);
+	  HAL_Delay(500);
 
-	  HAL_Delay(100);
   }
   /* USER CODE END 3 */
 }
@@ -228,7 +230,13 @@ void SystemClock_Config(void)
   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 1;
+  RCC_OscInitStruct.PLL.PLLN = 10;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
+  RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
+  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -238,12 +246,12 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSE;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
   {
     Error_Handler();
   }
@@ -416,7 +424,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.Timing = 0x00503D58;
+  hi2c1.Init.Timing = 0x10D19CE4;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -690,10 +698,6 @@ static void MX_TIM3_Init(void)
   sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
   if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
   {
     Error_Handler();
@@ -972,7 +976,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, SPI1_CS_Pin|EV_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LORA_NRST_GPIO_Port, LORA_NRST_Pin, GPIO_PIN_RESET);
@@ -1008,6 +1012,15 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : EV_Pin */
+  GPIO_InitStruct.Pin = EV_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(EV_GPIO_Port, &GPIO_InitStruct);
+
+
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */

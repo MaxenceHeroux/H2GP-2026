@@ -65,6 +65,8 @@ void Error_Handler(void);
 #define GPIO_BUSY_GPIO_Port GPIOB
 #define LORA_NRST_Pin GPIO_PIN_12
 #define LORA_NRST_GPIO_Port GPIOB
+#define EV_Pin GPIO_PIN_6
+#define EV_GPIO_Port GPIOC
 
 /* USER CODE BEGIN Private defines */
 
