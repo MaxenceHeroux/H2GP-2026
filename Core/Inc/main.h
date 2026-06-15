@@ -67,6 +67,10 @@ void Error_Handler(void);
 #define LORA_NRST_GPIO_Port GPIOB
 #define EV_Pin GPIO_PIN_6
 #define EV_GPIO_Port GPIOC
+#define H30_ESC_Pin GPIO_PIN_8
+#define H30_ESC_GPIO_Port GPIOC
+#define CC_Pin GPIO_PIN_8
+#define CC_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
 

@@ -37,11 +37,32 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-static char log_buf[100];
 
-#define LOG_TRANSMIT(len) do { \
+//--------------------------------------------LOG------------------------------------------------
+static void CDC_SendBlocking(uint8_t *buf, uint16_t len)
+{
+    uint32_t start = HAL_GetTick();
+
+    while (CDC_Transmit_FS(buf, len) == USBD_BUSY)
+    {
+        // timeout sécurité (évite hard lock si USB plante)
+        if ((HAL_GetTick() - start) > 50)
+        {
+            return; // drop message
+        }
+    }
+}
+
+static char log_buf[100];
+//Attention fonction bloquante ou non remplacer le 1 //TODO TRANMIT
+#define LOG_TRANSMIT1(len) do { \
   CDC_Transmit_FS((uint8_t*)log_buf, (len));\
 } while(0)
+
+#define LOG_TRANSMIT(len) \
+    do { CDC_SendBlocking((uint8_t*)log_buf, (len));\
+} while(0)
+
 
 #define LOG(fmt, ...) do { \
   int len = snprintf(log_buf, sizeof(log_buf), fmt "\r\n", ##__VA_ARGS__); \
@@ -62,6 +83,17 @@ static char log_buf[100];
   int len = snprintf(log_buf, sizeof(log_buf), "[ERROR] " fmt "\r\n", ##__VA_ARGS__); \
   LOG_TRANSMIT(len); \
 } while(0)
+
+//--------------------------------------------PIN STATE------------------------------------------------
+#define EV_ON()   HAL_GPIO_WritePin(EV_GPIO_Port, EV_Pin, GPIO_PIN_RESET)  // tire à 0
+#define EV_OFF()  HAL_GPIO_WritePin(EV_GPIO_Port, EV_Pin, GPIO_PIN_SET)    // relâche
+
+#define H30_ESC_ON()  HAL_GPIO_WritePin(H30_ESC_GPIO_Port, H30_ESC_Pin, GPIO_PIN_SET)
+#define H30_ESC_OFF()  HAL_GPIO_WritePin(H30_ESC_GPIO_Port, H30_ESC_Pin, GPIO_PIN_RESET)
+
+#define CC_ON()  HAL_GPIO_WritePin(CC_GPIO_Port, CC_Pin, GPIO_PIN_SET)
+#define CC_OFF()  HAL_GPIO_WritePin(CC_GPIO_Port, CC_Pin, GPIO_PIN_RESET)
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -122,6 +154,11 @@ void PWM_SetFreq(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t freq)
 
     htim->Instance->EGR = TIM_EGR_UG;
 }
+
+void setup(){
+	EV_OFF();
+
+}
 /* USER CODE END 0 */
 
 /**
@@ -174,16 +211,16 @@ int main(void)
 
   //start sound
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
-  PWM_SetFreq(&htim1,TIM_CHANNEL_3, 523);
+  PWM_SetFreq(&htim1,TIM_CHANNEL_3, 523);  // note Do
   HAL_Delay(300);
   PWM_SetFreq(&htim1,TIM_CHANNEL_3, 440);  // note La
   HAL_Delay(300);
-  PWM_SetFreq(&htim1,TIM_CHANNEL_3, 659);
+  PWM_SetFreq(&htim1,TIM_CHANNEL_3, 659);  // note Mi
   HAL_Delay(300);
   HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3);
 
-//  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
-//  PWM_SetFreq(&htim3,TIM_CHANNEL_1, 3);
+
+
 
 
   /* USER CODE END 2 */
@@ -199,11 +236,29 @@ int main(void)
 //	  sprintf(buffer, "%s\r\n", "Hello World");
 //	  CDC_Transmit_FS((uint8_t*)buffer, strlen(buffer));
 
-	  LOG("Hello World"); //Ctrl + space
-	  LOG_INFO("%d", 20);
+	  LOG("----START----"); //Ctrl + space
 
-	  HAL_GPIO_TogglePin(EV_GPIO_Port, EV_Pin);
+	  LOG_INFO("EV ON");
+	  EV_ON();
+	  HAL_Delay(2000);
+	  LOG_INFO("EV OFF");
+	  EV_OFF();
+	  HAL_Delay(2000);
+
+	  LOG_INFO("H30->ESC ON");
+	  H30_ESC_ON();
+	  HAL_Delay(2000);
+	  LOG_INFO("H30->ESC OFF");
+	  H30_ESC_OFF();
+	  HAL_Delay(5000);
+
+	  LOG_INFO("CC ON");
+	  CC_ON();
+	  HAL_Delay(100);
+	  LOG_INFO("CC OFF");
+	  CC_OFF();
 	  HAL_Delay(500);
+
 
   }
   /* USER CODE END 3 */
@@ -573,10 +628,6 @@ static void MX_TIM1_Init(void)
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
   if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
   {
     Error_Handler();
@@ -698,7 +749,7 @@ static void MX_TIM3_Init(void)
   sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -976,17 +1027,20 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, SPI1_CS_Pin|EV_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, SPI1_CS_Pin|EV_Pin|H30_ESC_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LORA_NRST_GPIO_Port, LORA_NRST_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : SPI1_CS_Pin */
-  GPIO_InitStruct.Pin = SPI1_CS_Pin;
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(CC_GPIO_Port, CC_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : SPI1_CS_Pin H30_ESC_Pin */
+  GPIO_InitStruct.Pin = SPI1_CS_Pin|H30_ESC_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(SPI1_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PC3 */
   GPIO_InitStruct.Pin = GPIO_PIN_3;
@@ -1020,7 +1074,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(EV_GPIO_Port, &GPIO_InitStruct);
 
-
+  /*Configure GPIO pin : CC_Pin */
+  GPIO_InitStruct.Pin = CC_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(CC_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
