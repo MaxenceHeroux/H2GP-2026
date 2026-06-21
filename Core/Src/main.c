@@ -147,6 +147,9 @@ void PWM_SetFreq(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t freq){
     htim->Instance->EGR = TIM_EGR_UG;
 }
 
+
+
+
 void PWM_SetDuty(TIM_HandleTypeDef *htim,uint32_t channel, uint8_t duty_percent){
     uint32_t arr = __HAL_TIM_GET_AUTORELOAD(htim);
 
@@ -163,7 +166,50 @@ void FanB_SetSpeed(uint8_t speed){
     PWM_SetDuty(&htim15, TIM_CHANNEL_2, 0);     // BIN2 = 0
 }
 
-void setup(){
+void FAN_Init(void){
+	HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);   // AIN1
+	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);   // AIN2
+	HAL_TIM_PWM_Start(&htim15, TIM_CHANNEL_1);  // BIN1
+	HAL_TIM_PWM_Start(&htim15, TIM_CHANNEL_2);  // BIN2
+
+
+	PWM_SetFreq(&htim8,  TIM_CHANNEL_2, 25000);
+	PWM_SetFreq(&htim3,  TIM_CHANNEL_4, 25000);
+	PWM_SetFreq(&htim15, TIM_CHANNEL_1, 25000);
+	PWM_SetFreq(&htim15, TIM_CHANNEL_2, 25000);
+}
+
+
+
+
+void RGB_Init(void){
+    HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+    HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
+    HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_4);
+
+    PWM_SetFreq(&htim2, TIM_CHANNEL_1, 1000); //1KHz
+    PWM_SetFreq(&htim2, TIM_CHANNEL_3, 1000);
+    PWM_SetFreq(&htim2, TIM_CHANNEL_4, 1000);
+}
+
+void RGB_Set(uint8_t r, uint8_t g, uint8_t b){
+    // COMMON ANODE
+	uint32_t arr = __HAL_TIM_GET_AUTORELOAD(&htim2);
+
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, arr - ((uint32_t)arr * r) / 255);
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, arr - ((uint32_t)arr * g) / 255);
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, arr - ((uint32_t)arr * b) / 255);
+
+	// COMMON CATHODE
+//	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, ((uint32_t)arr * r) / 255);
+//	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, ((uint32_t)arr * g) / 255);
+//	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, ((uint32_t)arr * b) / 255);
+}
+
+
+
+
+void Board_Init(){
 	EV_OFF();
 	CC_OFF();
 	H30_ESC_ON();
@@ -220,9 +266,9 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   //Init
-  setup();
+  Board_Init();
 
-  //start sound
+  //Start sound
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
   PWM_SetFreq(&htim1,TIM_CHANNEL_3, 523);  // note Do
   HAL_Delay(300);
@@ -233,21 +279,13 @@ int main(void)
   HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3);
 
   //Fans
-  HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);   // AIN1
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);   // AIN2
-
-  HAL_TIM_PWM_Start(&htim15, TIM_CHANNEL_1);  // BIN1
-  HAL_TIM_PWM_Start(&htim15, TIM_CHANNEL_2);  // BIN2
-
-
-  PWM_SetFreq(&htim8,  TIM_CHANNEL_2, 25000);
-  PWM_SetFreq(&htim3,  TIM_CHANNEL_4, 25000);
-
-  PWM_SetFreq(&htim15, TIM_CHANNEL_1, 25000);
-  PWM_SetFreq(&htim15, TIM_CHANNEL_2, 25000);
-
+  FAN_Init();
   FanA_SetSpeed(30);
   FanB_SetSpeed(30);
+
+  //LED
+  RGB_Init();
+  RGB_Set(255,255,255);
 
   /* USER CODE END 2 */
 
