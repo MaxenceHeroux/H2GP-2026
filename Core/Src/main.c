@@ -23,6 +23,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "usbd_cdc_if.h"
+#include "usbd_core.h"
+extern USBD_HandleTypeDef hUsbDeviceFS;
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -39,30 +41,21 @@
 /* USER CODE BEGIN PM */
 
 //--------------------------------------------LOG------------------------------------------------
-static void CDC_SendBlocking(uint8_t *buf, uint16_t len)
-{
-    uint32_t start = HAL_GetTick();
+static char log_buf[100];
 
-    while (CDC_Transmit_FS(buf, len) == USBD_BUSY)
-    {
-        // timeout sécurité (évite hard lock si USB plante)
-        if ((HAL_GetTick() - start) > 50)
-        {
-            return; // drop message
-        }
+static void CDC_SendBlocking(uint8_t *buf, uint16_t len){
+    uint32_t start = HAL_GetTick();
+    while (CDC_Transmit_FS(buf, len) == USBD_BUSY){
+        if ((HAL_GetTick() - start) > 50) return; // timeout sécurité (évite hard lock si USB plante)
     }
 }
 
-static char log_buf[100];
-//Attention fonction bloquante ou non remplacer le 1 //TODO TRANMIT
-#define LOG_TRANSMIT1(len) do { \
-  CDC_Transmit_FS((uint8_t*)log_buf, (len));\
-} while(0)
+static inline uint8_t USB_LogEnabled(void){return (hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED);}
 
-#define LOG_TRANSMIT(len) \
-    do { CDC_SendBlocking((uint8_t*)log_buf, (len));\
+#define LOG_TRANSMIT(len) do { \
+    if (USB_LogEnabled()) \
+        CDC_SendBlocking((uint8_t*)log_buf, (len)); \
 } while(0)
-
 
 #define LOG(fmt, ...) do { \
   int len = snprintf(log_buf, sizeof(log_buf), fmt "\r\n", ##__VA_ARGS__); \
@@ -143,8 +136,7 @@ static void MX_TIM15_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void PWM_SetFreq(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t freq)
-{
+void PWM_SetFreq(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t freq){
     uint32_t psc = 79; // timer à 1 MHz
     uint32_t arr = (1000000 / freq) - 1;
 
@@ -155,10 +147,28 @@ void PWM_SetFreq(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t freq)
     htim->Instance->EGR = TIM_EGR_UG;
 }
 
+void PWM_SetDuty(TIM_HandleTypeDef *htim,uint32_t channel, uint8_t duty_percent){
+    uint32_t arr = __HAL_TIM_GET_AUTORELOAD(htim);
+
+    __HAL_TIM_SET_COMPARE( htim, channel, (arr * duty_percent) / 100);
+}
+
+void FanA_SetSpeed(uint8_t speed){
+    PWM_SetDuty(&htim8, TIM_CHANNEL_2, speed); // AIN1 PWM
+    PWM_SetDuty(&htim3, TIM_CHANNEL_4, 0);     // AIN2 = 0
+}
+
+void FanB_SetSpeed(uint8_t speed){
+    PWM_SetDuty(&htim15, TIM_CHANNEL_1, speed); // BIN1 PWM
+    PWM_SetDuty(&htim15, TIM_CHANNEL_2, 0);     // BIN2 = 0
+}
+
 void setup(){
 	EV_OFF();
-
+	CC_OFF();
+	H30_ESC_ON();
 }
+
 /* USER CODE END 0 */
 
 /**
@@ -209,6 +219,9 @@ int main(void)
   MX_TIM15_Init();
   /* USER CODE BEGIN 2 */
 
+  //Init
+  setup();
+
   //start sound
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
   PWM_SetFreq(&htim1,TIM_CHANNEL_3, 523);  // note Do
@@ -219,9 +232,22 @@ int main(void)
   HAL_Delay(300);
   HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3);
 
+  //Fans
+  HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2);   // AIN1
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);   // AIN2
+
+  HAL_TIM_PWM_Start(&htim15, TIM_CHANNEL_1);  // BIN1
+  HAL_TIM_PWM_Start(&htim15, TIM_CHANNEL_2);  // BIN2
 
 
+  PWM_SetFreq(&htim8,  TIM_CHANNEL_2, 25000);
+  PWM_SetFreq(&htim3,  TIM_CHANNEL_4, 25000);
 
+  PWM_SetFreq(&htim15, TIM_CHANNEL_1, 25000);
+  PWM_SetFreq(&htim15, TIM_CHANNEL_2, 25000);
+
+  FanA_SetSpeed(30);
+  FanB_SetSpeed(30);
 
   /* USER CODE END 2 */
 
@@ -233,32 +259,27 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-//	  sprintf(buffer, "%s\r\n", "Hello World");
-//	  CDC_Transmit_FS((uint8_t*)buffer, strlen(buffer));
-
 	  LOG("----START----"); //Ctrl + space
 
 	  LOG_INFO("EV ON");
 	  EV_ON();
-	  HAL_Delay(2000);
+	  HAL_Delay(500);
 	  LOG_INFO("EV OFF");
 	  EV_OFF();
-	  HAL_Delay(2000);
 
-	  LOG_INFO("H30->ESC ON");
-	  H30_ESC_ON();
-	  HAL_Delay(2000);
-	  LOG_INFO("H30->ESC OFF");
-	  H30_ESC_OFF();
 	  HAL_Delay(5000);
 
+	  LOG_INFO("H30->ESC OFF");
+	  H30_ESC_OFF();
 	  LOG_INFO("CC ON");
 	  CC_ON();
-	  HAL_Delay(100);
+	  HAL_Delay(50);
 	  LOG_INFO("CC OFF");
 	  CC_OFF();
-	  HAL_Delay(500);
+	  LOG_INFO("H30->ESC ON");
+	  H30_ESC_ON();
 
+	  HAL_Delay(5000);
 
   }
   /* USER CODE END 3 */
