@@ -157,8 +157,8 @@ void PWM_SetDuty(TIM_HandleTypeDef *htim,uint32_t channel, uint8_t duty_percent)
 }
 
 void FanA_SetSpeed(uint8_t speed){
-    PWM_SetDuty(&htim8, TIM_CHANNEL_2, speed); // AIN1 PWM
-    PWM_SetDuty(&htim3, TIM_CHANNEL_4, 0);     // AIN2 = 0
+    PWM_SetDuty(&htim8, TIM_CHANNEL_2, 0); // AIN1 PWM
+    PWM_SetDuty(&htim3, TIM_CHANNEL_4, speed);     // AIN2 = 0
 }
 
 void FanB_SetSpeed(uint8_t speed){
@@ -280,12 +280,12 @@ int main(void)
 
   //Fans
   FAN_Init();
-  FanA_SetSpeed(30);
-  FanB_SetSpeed(30);
+  FanA_SetSpeed(100);
+  FanB_SetSpeed(100);
 
   //LED
-  RGB_Init();
-  RGB_Set(255,255,255);
+ // RGB_Init();
+ // RGB_Set(255,255,255);
 
   /* USER CODE END 2 */
 
