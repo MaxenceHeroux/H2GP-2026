@@ -25,6 +25,7 @@
 #include "usbd_cdc_if.h"
 #include "usbd_core.h"
 extern USBD_HandleTypeDef hUsbDeviceFS;
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -39,6 +40,16 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
+
+//--------------------------------------GENERAL TIMING-------------------------------------------
+#define EV_OPEN_TIME 100
+#define EV_CC_WAIT 5000
+#define CC_EV_WAIT 5000
+#define CC_CLOSE_TIME 25
+
+#define TEMP_FAN_CRITIQUE  50.0f
+#define TEMP_FAN_OK 35.0f
+#define AVERGAGE_FAN_SPEED 80
 
 //--------------------------------------------LOG------------------------------------------------
 static char log_buf[100];
@@ -164,6 +175,13 @@ uint16_t ADC1_ReadChannel(uint32_t channel){
 	return data;
 }
 
+void ADC_Init(){
+	if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK)
+	  {
+	      LOG_ERROR("ADC1 calibration FAILED");
+	      Error_Handler();
+	  }
+}
 
 void PWM_SetFreq(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t freq){
     uint32_t psc = 79; // timer à 1 MHz
@@ -294,15 +312,17 @@ int main(void)
   MX_TIM15_Init();
   /* USER CODE BEGIN 2 */
 
-  //Init ADC : calibration avant toute conversion
-  if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK)
-  {
-      LOG_ERROR("ADC1 calibration FAILED");
-      Error_Handler();
-  }
-
   //Init
+  ADC_Init();
   Board_Init();
+  uint32_t t_ev = 0;
+  uint32_t t_cc = 0;
+  uint32_t t_end = 0;
+  uint32_t t_temp =0;
+  uint8_t state = 0;
+
+  uint8_t Fan_warn = 0;
+
 
   //Start sound
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
@@ -316,8 +336,8 @@ int main(void)
 
   //Fans
   FAN_Init();
-  FanA_SetSpeed(80);
-  FanB_SetSpeed(80);
+  FanA_SetSpeed(AVERGAGE_FAN_SPEED);
+  FanB_SetSpeed(AVERGAGE_FAN_SPEED);
 
   //LED
   RGB_Init();
@@ -333,38 +353,83 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-	  LOG("----START----"); //Ctrl + space
-//
-//	  LOG_INFO("EV ON");
-//	  EV_ON();
-//	  HAL_Delay(500);
-//	  LOG_INFO("EV OFF");
-//	  EV_OFF();
-//
-//	  HAL_Delay(5000);
-//
-//	  LOG_INFO("H30->ESC OFF");
-//	  H30_ESC_OFF();
-//	  LOG_INFO("CC ON");
-//	  CC_ON();
-//	  HAL_Delay(50);
-//	  LOG_INFO("CC OFF");
-//	  CC_OFF();
-//	  LOG_INFO("H30->ESC ON");
-//	  H30_ESC_ON();
+	  uint32_t now = HAL_GetTick();
 
-//	  HAL_Delay(5000);
+	  /* ---------------- EV ON / OFF ---------------- */
+	  if (state == 0) {
+	      LOG_INFO("EV ON");
+	      EV_ON();
+	      t_ev = now;
+	      state = 1;
+	  }
 
+	  if (state == 1 && (now - t_ev) > EV_OPEN_TIME) {
+	      LOG_INFO("EV OFF");
+	      EV_OFF();
+	      t_ev = now;
+	      state = 2;
+	  }
+
+	  /* attente 5s */
+	  if (state == 2 && (now - t_ev) > EV_CC_WAIT) {
+	      state = 3;
+	  }
+
+	  /* ---------------- H30 / CC pulse ---------------- */
+	  if (state == 3) {
+	      LOG_INFO("H30->ESC OFF");
+	      H30_ESC_OFF();
+
+	      LOG_INFO("CC ON");
+	      CC_ON();
+	      t_cc = now;
+	      state = 4;
+	  }
+
+	  if (state == 4 && (now - t_cc) > CC_CLOSE_TIME) {
+	      LOG_INFO("CC OFF");
+	      CC_OFF();
+
+	      LOG_INFO("H30->ESC ON");
+	      H30_ESC_ON();
+
+	      t_end = now;
+	      state = 5;
+	  }
+
+	  /* attente 5s */
+	  if (state == 5 && (now - t_end) > CC_EV_WAIT) {
+	      state = 0;
+	  }
+
+	  //Temperature Lecture + warning
 	  uint16_t adc_in1 = ADC1_ReadChannel(ADC_CHANNEL_1);
 	  uint16_t adc_in2 = ADC1_ReadChannel(ADC_CHANNEL_2);
 
-	  uint32_t v1_mv = (3300UL * adc_in1) / 4095UL;
-	  uint32_t v2_mv = (3300UL * adc_in2) / 4095UL;
+	  float Temp_1 = 1.0f / ((1.0f/298.15f) + (1.0f/3950.0f) * logf((adc_in1/(4095.0f-adc_in1)))) - 273.15f;
+	  float Temp_2 = 1.0f / ((1.0f/298.15f) + (1.0f/3950.0f) * logf((adc_in2/(4095.0f-adc_in2)))) - 273.15f;
 
-	  LOG_INFO("IN1 %lu mV", v1_mv);
-	  LOG_INFO("IN2 %lu mV", v2_mv);
+	  if ((HAL_GetTick() - t_temp) >= 500){
+		  t_temp = HAL_GetTick();
+		  //LOG_INFO("NTC_VERT %lu mV", (3300UL * adc_in1) / 4095UL);
+		  LOG_INFO("Temp_1 %ld.%ld C",((int32_t)(Temp_1 * 10.0f)) / 10,labs(((int32_t)(Temp_1 * 10.0f)) % 10));
+		  //LOG_INFO("NTC_BLANC %lu mV", (3300UL * adc_in2) / 4095UL);
+		  LOG_INFO("Temp_2 %ld.%ld C",((int32_t)(Temp_2 * 10.0f)) / 10,labs(((int32_t)(Temp_2 * 10.0f)) % 10));
+	  }
 
-	  HAL_Delay(500);
+	  if (Temp_1>TEMP_FAN_CRITIQUE || Temp_2 >TEMP_FAN_CRITIQUE){
+		  if(Temp_1 >50.0f)	LOG_WARN("Temperature 1 > 50 degres"); //TODO LED rouge !
+		  if(Temp_2 >50.0f)	LOG_WARN("Temperature 2 > 50 degres");
+		  Fan_warn =1;
+		  FanA_SetSpeed(100);
+		  FanB_SetSpeed(100);
+
+	  }else if (Fan_warn==1 && Temp_1<TEMP_FAN_OK && Temp_2<TEMP_FAN_OK){
+		  FanA_SetSpeed(AVERGAGE_FAN_SPEED);
+		  FanB_SetSpeed(AVERGAGE_FAN_SPEED);
+		  Fan_warn =0;
+	  }
+
 
   }
   /* USER CODE END 3 */
