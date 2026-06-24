@@ -148,7 +148,7 @@ static void MX_TIM15_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-uint16_t ADC1_ReadChannel(uint32_t channel){
+uint16_t ADC_ReadChannel(ADC_HandleTypeDef *hadc, uint32_t channel){
 	ADC_ChannelConfTypeDef sConfig = {0};
 	sConfig.Channel = channel;
 	sConfig.Rank = ADC_REGULAR_RANK_1;
@@ -157,21 +157,21 @@ uint16_t ADC1_ReadChannel(uint32_t channel){
 	sConfig.OffsetNumber = ADC_OFFSET_NONE;
 	sConfig.Offset = 0;
 
-	if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK) {
+	if (HAL_ADC_ConfigChannel(hadc, &sConfig) != HAL_OK) {
 		LOG_ERROR("ConfigChannel FAIL ch=%lu", channel);
 	}
 
-	if (HAL_ADC_Start(&hadc1) != HAL_OK) {
+	if (HAL_ADC_Start(hadc) != HAL_OK) {
 		LOG_ERROR("ADC_Start FAIL ch=%lu", channel);
 	}
 
-	HAL_StatusTypeDef poll = HAL_ADC_PollForConversion(&hadc1, 100);
+	HAL_StatusTypeDef poll = HAL_ADC_PollForConversion(hadc, 100);
 	if (poll != HAL_OK) {
 		LOG_ERROR("PollForConversion FAIL/TIMEOUT ch=%lu status=%d", channel, poll);
 	}
 
-	uint16_t data = HAL_ADC_GetValue(&hadc1);
-	HAL_ADC_Stop(&hadc1);
+	uint16_t data = HAL_ADC_GetValue(hadc);
+	HAL_ADC_Stop(hadc);
 	return data;
 }
 
@@ -181,7 +181,39 @@ void ADC_Init(){
 	      LOG_ERROR("ADC1 calibration FAILED");
 	      Error_Handler();
 	  }
+	if (HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED) != HAL_OK)
+	  {
+		  LOG_ERROR("ADC3 calibration FAILED");
+		  Error_Handler();
+	  }
 }
+
+
+
+
+void I2C_Scan(void){
+    LOG("---- I2C SCAN START ----");
+    uint8_t found = 0;
+
+    for (uint8_t addr = 1; addr < 128; addr++){
+        // HAL attend l'adresse déjà décalée (bit 0 = R/W), donc <<1
+        HAL_StatusTypeDef res = HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(addr << 1), 2, 10);
+
+        if (res == HAL_OK){
+            LOG_INFO("I2C device found at 0x%02X", addr);
+            found++;
+        }
+    }
+
+    if (found == 0){
+        LOG_WARN("No I2C device found");
+    } else {
+        LOG_INFO("I2C scan done, %u device(s) found", found);
+    }
+    LOG("---- I2C SCAN END ----");
+}
+
+
 
 void PWM_SetFreq(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t freq){
     uint32_t psc = 79; // timer à 1 MHz
@@ -343,6 +375,10 @@ int main(void)
   RGB_Init();
   RGB_Set(0,100,200);
 
+  //I2C
+  HAL_Delay(1000);
+  I2C_Scan();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -402,12 +438,16 @@ int main(void)
 	      state = 0;
 	  }
 
-	  //Temperature Lecture + warning
-	  uint16_t adc_in1 = ADC1_ReadChannel(ADC_CHANNEL_1);
-	  uint16_t adc_in2 = ADC1_ReadChannel(ADC_CHANNEL_2);
-
+	  //Temperature Lecture
+	  uint16_t adc_in1 = ADC_ReadChannel(&hadc1,ADC_CHANNEL_1);
+	  uint16_t adc_in2 = ADC_ReadChannel(&hadc1, ADC_CHANNEL_2);
 	  float Temp_1 = 1.0f / ((1.0f/298.15f) + (1.0f/3950.0f) * logf((adc_in1/(4095.0f-adc_in1)))) - 273.15f;
 	  float Temp_2 = 1.0f / ((1.0f/298.15f) + (1.0f/3950.0f) * logf((adc_in2/(4095.0f-adc_in2)))) - 273.15f;
+
+	  //Tension XT60
+	  uint16_t adc_in3 = ADC_ReadChannel(&hadc3, ADC_CHANNEL_4);
+	  uint32_t v_pc3_mv = (3300UL * adc_in3) / 4095UL;
+	  uint32_t v_source_mv = (v_pc3_mv * (100UL + 20UL)) / 20UL;
 
 	  if ((HAL_GetTick() - t_temp) >= 500){
 		  t_temp = HAL_GetTick();
@@ -415,8 +455,11 @@ int main(void)
 		  LOG_INFO("Temp_1 %ld.%ld C",((int32_t)(Temp_1 * 10.0f)) / 10,labs(((int32_t)(Temp_1 * 10.0f)) % 10));
 		  //LOG_INFO("NTC_BLANC %lu mV", (3300UL * adc_in2) / 4095UL);
 		  LOG_INFO("Temp_2 %ld.%ld C",((int32_t)(Temp_2 * 10.0f)) / 10,labs(((int32_t)(Temp_2 * 10.0f)) % 10));
+
+		  LOG_INFO("Tension %lu mV", v_source_mv);
 	  }
 
+	  //FAN warning
 	  if (Temp_1>TEMP_FAN_CRITIQUE || Temp_2 >TEMP_FAN_CRITIQUE){
 		  if(Temp_1 >50.0f)	LOG_WARN("Temperature 1 > 50 degres"); //TODO LED rouge !
 		  if(Temp_2 >50.0f)	LOG_WARN("Temperature 2 > 50 degres");
@@ -1253,6 +1296,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct_ADC.Mode = GPIO_MODE_ANALOG_ADC_CONTROL;
   GPIO_InitStruct_ADC.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct_ADC);
+
+  GPIO_InitStruct_ADC.Pin = GPIO_PIN_3;
+  GPIO_InitStruct_ADC.Mode = GPIO_MODE_ANALOG_ADC_CONTROL;
+  GPIO_InitStruct_ADC.Pull = GPIO_NOPULL;
+
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct_ADC);
+
 /* USER CODE END MX_GPIO_Init_2 */
 }
 
