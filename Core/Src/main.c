@@ -136,6 +136,35 @@ static void MX_TIM15_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+uint16_t ADC1_ReadChannel(uint32_t channel){
+	ADC_ChannelConfTypeDef sConfig = {0};
+	sConfig.Channel = channel;
+	sConfig.Rank = ADC_REGULAR_RANK_1;
+	sConfig.SamplingTime = ADC_SAMPLETIME_47CYCLES_5;
+	sConfig.SingleDiff = ADC_SINGLE_ENDED;
+	sConfig.OffsetNumber = ADC_OFFSET_NONE;
+	sConfig.Offset = 0;
+
+	if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK) {
+		LOG_ERROR("ConfigChannel FAIL ch=%lu", channel);
+	}
+
+	if (HAL_ADC_Start(&hadc1) != HAL_OK) {
+		LOG_ERROR("ADC_Start FAIL ch=%lu", channel);
+	}
+
+	HAL_StatusTypeDef poll = HAL_ADC_PollForConversion(&hadc1, 100);
+	if (poll != HAL_OK) {
+		LOG_ERROR("PollForConversion FAIL/TIMEOUT ch=%lu status=%d", channel, poll);
+	}
+
+	uint16_t data = HAL_ADC_GetValue(&hadc1);
+	HAL_ADC_Stop(&hadc1);
+	return data;
+}
+
+
 void PWM_SetFreq(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t freq){
     uint32_t psc = 79; // timer à 1 MHz
     uint32_t arr = (1000000 / freq) - 1;
@@ -265,6 +294,13 @@ int main(void)
   MX_TIM15_Init();
   /* USER CODE BEGIN 2 */
 
+  //Init ADC : calibration avant toute conversion
+  if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK)
+  {
+      LOG_ERROR("ADC1 calibration FAILED");
+      Error_Handler();
+  }
+
   //Init
   Board_Init();
 
@@ -280,12 +316,12 @@ int main(void)
 
   //Fans
   FAN_Init();
-  FanA_SetSpeed(100);
-  FanB_SetSpeed(100);
+  FanA_SetSpeed(80);
+  FanB_SetSpeed(80);
 
   //LED
- // RGB_Init();
- // RGB_Set(255,255,255);
+  RGB_Init();
+  RGB_Set(0,100,200);
 
   /* USER CODE END 2 */
 
@@ -298,26 +334,37 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
 	  LOG("----START----"); //Ctrl + space
+//
+//	  LOG_INFO("EV ON");
+//	  EV_ON();
+//	  HAL_Delay(500);
+//	  LOG_INFO("EV OFF");
+//	  EV_OFF();
+//
+//	  HAL_Delay(5000);
+//
+//	  LOG_INFO("H30->ESC OFF");
+//	  H30_ESC_OFF();
+//	  LOG_INFO("CC ON");
+//	  CC_ON();
+//	  HAL_Delay(50);
+//	  LOG_INFO("CC OFF");
+//	  CC_OFF();
+//	  LOG_INFO("H30->ESC ON");
+//	  H30_ESC_ON();
 
-	  LOG_INFO("EV ON");
-	  EV_ON();
+//	  HAL_Delay(5000);
+
+	  uint16_t adc_in1 = ADC1_ReadChannel(ADC_CHANNEL_1);
+	  uint16_t adc_in2 = ADC1_ReadChannel(ADC_CHANNEL_2);
+
+	  uint32_t v1_mv = (3300UL * adc_in1) / 4095UL;
+	  uint32_t v2_mv = (3300UL * adc_in2) / 4095UL;
+
+	  LOG_INFO("IN1 %lu mV", v1_mv);
+	  LOG_INFO("IN2 %lu mV", v2_mv);
+
 	  HAL_Delay(500);
-	  LOG_INFO("EV OFF");
-	  EV_OFF();
-
-	  HAL_Delay(5000);
-
-	  LOG_INFO("H30->ESC OFF");
-	  H30_ESC_OFF();
-	  LOG_INFO("CC ON");
-	  CC_ON();
-	  HAL_Delay(50);
-	  LOG_INFO("CC OFF");
-	  CC_OFF();
-	  LOG_INFO("H30->ESC ON");
-	  H30_ESC_ON();
-
-	  HAL_Delay(5000);
 
   }
   /* USER CODE END 3 */
@@ -451,7 +498,7 @@ static void MX_ADC1_Init(void)
   sConfig.Channel = ADC_CHANNEL_1;
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
-  sConfig.SingleDiff = ADC_DIFFERENTIAL_ENDED;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
@@ -509,7 +556,7 @@ static void MX_ADC3_Init(void)
   sConfig.Channel = ADC_CHANNEL_3;
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
-  sConfig.SingleDiff = ADC_DIFFERENTIAL_ENDED;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
   if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK)
@@ -1101,12 +1148,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PC3 */
-  GPIO_InitStruct.Pin = GPIO_PIN_3;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG_ADC_CONTROL;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
   /*Configure GPIO pin : GPIO_BUSY_Pin */
   GPIO_InitStruct.Pin = GPIO_BUSY_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
@@ -1141,6 +1182,12 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(CC_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
+  //TODO comprendre pourquoi l ioc ne le fait pas
+  GPIO_InitTypeDef GPIO_InitStruct_ADC = {0};
+  GPIO_InitStruct_ADC.Pin = GPIO_PIN_0 | GPIO_PIN_1; // PC0=ADC1_IN1, PC1=ADC1_IN2
+  GPIO_InitStruct_ADC.Mode = GPIO_MODE_ANALOG_ADC_CONTROL;
+  GPIO_InitStruct_ADC.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct_ADC);
 /* USER CODE END MX_GPIO_Init_2 */
 }
 
