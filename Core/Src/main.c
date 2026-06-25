@@ -449,15 +449,9 @@ int main(void)
 	  uint32_t v_pc3_mv = (3300UL * adc_in3) / 4095UL;
 	  uint32_t v_source_mv = (v_pc3_mv * (100UL + 20UL)) / 20UL;
 
-	  if ((HAL_GetTick() - t_temp) >= 500){
-		  t_temp = HAL_GetTick();
-		  //LOG_INFO("NTC_VERT %lu mV", (3300UL * adc_in1) / 4095UL);
-		  LOG_INFO("Temp_1 %ld.%ld C",((int32_t)(Temp_1 * 10.0f)) / 10,labs(((int32_t)(Temp_1 * 10.0f)) % 10));
-		  //LOG_INFO("NTC_BLANC %lu mV", (3300UL * adc_in2) / 4095UL);
-		  LOG_INFO("Temp_2 %ld.%ld C",((int32_t)(Temp_2 * 10.0f)) / 10,labs(((int32_t)(Temp_2 * 10.0f)) % 10));
+	  //Pression PDMS
+	  Get_pdms(&presskPa, &tempDegC);
 
-		  LOG_INFO("Tension %lu mV", v_source_mv);
-	  }
 
 	  //FAN warning
 	  if (Temp_1>TEMP_FAN_CRITIQUE || Temp_2 >TEMP_FAN_CRITIQUE){
@@ -473,7 +467,31 @@ int main(void)
 		  Fan_warn =0;
 	  }
 
-	  Get_pdms(&presskPa, &tempDegC);
+
+	  LOG_INFO("Temp_1 %ld.%ld C",((int32_t)(Temp_1 * 10.0f)) / 10,labs(((int32_t)(Temp_1 * 10.0f)) % 10));
+	  LOG_INFO("Temp_2 %ld.%ld C",((int32_t)(Temp_2 * 10.0f)) / 10,labs(((int32_t)(Temp_2 * 10.0f)) % 10));
+	  LOG_INFO("Tension %lu mV", v_source_mv);
+	  LOG_INFO("Pression = %.2f uPa", presskPa);
+	  LOG_INFO("Temp_tube = %.2f C", tempDegC);
+
+	  if ((HAL_GetTick() - t_temp) >= 500){
+	  		  t_temp = HAL_GetTick();
+	  		  /*
+
+	  		  //LOG_INFO("NTC_VERT %lu mV", (3300UL * adc_in1) / 4095UL);
+	  		  LOG_INFO("Temp_1 %ld.%ld C",((int32_t)(Temp_1 * 10.0f)) / 10,labs(((int32_t)(Temp_1 * 10.0f)) % 10));
+	  		  //LOG_INFO("NTC_BLANC %lu mV", (3300UL * adc_in2) / 4095UL);
+	  		  LOG_INFO("Temp_2 %ld.%ld C",((int32_t)(Temp_2 * 10.0f)) / 10,labs(((int32_t)(Temp_2 * 10.0f)) % 10));
+
+	  		  LOG_INFO("Tension %lu mV", v_source_mv);
+
+	  		  LOG_INFO("Pression = %.2f uPa", presskPa);
+	  	  	  LOG_INFO("Temp_tube = %.2f C", tempDegC);
+
+	  		  */
+	  	  }
+
+
 
   }
   /* USER CODE END 3 */

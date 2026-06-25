@@ -540,14 +540,10 @@ static void debugPrintTemperature_float(float tempDegC)
 //home made
 void Get_pdms(float * presskPa, float * tempDegC )
 {
-
     uint16_t syncStatusValue;
 
     /* Please select PDMS_SensorType_t here accordingly to convert raw values to pressure values */
-    if (WE_SUCCESS == PDMS_getPressureAndTemperature_float(&pdms, pdmsSensorType, presskPa, tempDegC, &syncStatusValue)) {
-    	LOG_INFO("Press = %.2f uPa", *presskPa);
-    	LOG_INFO("Temp = %.2f C", *tempDegC);
-    }else{
-        LOG_WARN("Get_pdms(): Failed");
+    if (WE_SUCCESS != PDMS_getPressureAndTemperature_float(&pdms, pdmsSensorType, presskPa, tempDegC, &syncStatusValue)) {
+    	 LOG_WARN("Get_pdms(): Failed");
     }
 }
