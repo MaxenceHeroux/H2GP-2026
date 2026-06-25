@@ -49,8 +49,6 @@ extern "C" {
 
 /* USER CODE END EM */
 
-void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
-
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
@@ -73,6 +71,17 @@ void Error_Handler(void);
 #define CC_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
+uint16_t ADC_ReadChannel(ADC_HandleTypeDef *hadc, uint32_t channel);
+void ADC_Init();
+void I2C_Scan(void);
+void PWM_SetFreq(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t freq);
+void PWM_SetDuty(TIM_HandleTypeDef *htim,uint32_t channel, uint8_t duty_percent);
+void FanA_SetSpeed(uint8_t speed);
+void FanB_SetSpeed(uint8_t speed);
+void FAN_Init(void);
+void RGB_Init(void);
+void RGB_Set(uint8_t r, uint8_t g, uint8_t b);
+void Board_Init();
 
 /* USER CODE END Private defines */
 

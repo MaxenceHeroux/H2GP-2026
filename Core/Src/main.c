@@ -22,10 +22,12 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "usbd_cdc_if.h"
-#include "usbd_core.h"
-extern USBD_HandleTypeDef hUsbDeviceFS;
+#include "log.h" //LOG
 #include <math.h>
+
+#include "PDMS_I2C.h" //Pression
+
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -49,44 +51,9 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 
 #define TEMP_FAN_CRITIQUE  50.0f
 #define TEMP_FAN_OK 35.0f
-#define AVERGAGE_FAN_SPEED 80
+#define AVERAGE_FAN_SPEED 80
+#define MAX_FAN_SPEED 100
 
-//--------------------------------------------LOG------------------------------------------------
-static char log_buf[100];
-
-static void CDC_SendBlocking(uint8_t *buf, uint16_t len){
-    uint32_t start = HAL_GetTick();
-    while (CDC_Transmit_FS(buf, len) == USBD_BUSY){
-        if ((HAL_GetTick() - start) > 50) return; // timeout sécurité (évite hard lock si USB plante)
-    }
-}
-
-static inline uint8_t USB_LogEnabled(void){return (hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED);}
-
-#define LOG_TRANSMIT(len) do { \
-    if (USB_LogEnabled()) \
-        CDC_SendBlocking((uint8_t*)log_buf, (len)); \
-} while(0)
-
-#define LOG(fmt, ...) do { \
-  int len = snprintf(log_buf, sizeof(log_buf), fmt "\r\n", ##__VA_ARGS__); \
-  LOG_TRANSMIT(len); \
-} while(0)
-
-#define LOG_INFO(fmt, ...) do { \
-  int len = snprintf(log_buf, sizeof(log_buf), "[%lu][INFO] " fmt "\r\n", HAL_GetTick(), ##__VA_ARGS__); \
-  LOG_TRANSMIT(len); \
-} while(0)
-
-#define LOG_WARN(fmt, ...) do { \
-  int len = snprintf(log_buf, sizeof(log_buf), "[WARN] " fmt "\r\n", ##__VA_ARGS__); \
-  LOG_TRANSMIT(len); \
-} while(0)
-
-#define LOG_ERROR(fmt, ...) do { \
-  int len = snprintf(log_buf, sizeof(log_buf), "[ERROR] " fmt "\r\n", ##__VA_ARGS__); \
-  LOG_TRANSMIT(len); \
-} while(0)
 
 //--------------------------------------------PIN STATE------------------------------------------------
 #define EV_ON()   HAL_GPIO_WritePin(EV_GPIO_Port, EV_Pin, GPIO_PIN_RESET)  // tire à 0
@@ -101,24 +68,24 @@ static inline uint8_t USB_LogEnabled(void){return (hUsbDeviceFS.dev_state == USB
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-ADC_HandleTypeDef hadc1;
-ADC_HandleTypeDef hadc3;
+extern ADC_HandleTypeDef hadc1;
+extern ADC_HandleTypeDef hadc3;
 
-I2C_HandleTypeDef hi2c1;
+extern I2C_HandleTypeDef hi2c1;
 
-QSPI_HandleTypeDef hqspi;
+extern QSPI_HandleTypeDef hqspi;
 
-SPI_HandleTypeDef hspi1;
+extern SPI_HandleTypeDef hspi1;
 
-TIM_HandleTypeDef htim1;
-TIM_HandleTypeDef htim2;
-TIM_HandleTypeDef htim3;
-TIM_HandleTypeDef htim8;
-TIM_HandleTypeDef htim15;
+extern TIM_HandleTypeDef htim1;
+extern TIM_HandleTypeDef htim2;
+extern TIM_HandleTypeDef htim3;
+extern TIM_HandleTypeDef htim8;
+extern TIM_HandleTypeDef htim15;
 
-UART_HandleTypeDef huart4;
-UART_HandleTypeDef huart5;
-UART_HandleTypeDef huart3;
+extern UART_HandleTypeDef huart4;
+extern UART_HandleTypeDef huart5;
+extern UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 
@@ -269,9 +236,33 @@ void RGB_Init(void){
     PWM_SetFreq(&htim2, TIM_CHANNEL_1, 1000); //1KHz
     PWM_SetFreq(&htim2, TIM_CHANNEL_3, 1000);
     PWM_SetFreq(&htim2, TIM_CHANNEL_4, 1000);
+
+    //BLINK
+    RGB_Set(255,0,0); //rouge
+    HAL_Delay(200);
+    RGB_Set(0,255,0); //vert
+    HAL_Delay(200);
+    RGB_Set(0,0,255); //Bleu
+    HAL_Delay(200);
+    RGB_Set(255,60,0); //Orange
+    HAL_Delay(200);
+    RGB_Set(0,0,0);
 }
 
 void RGB_Set(uint8_t r, uint8_t g, uint8_t b){
+
+	if (r == 0 && g == 0 && b == 0)
+	{
+		HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
+		HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_3);
+		HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_4);
+		return;
+	}
+
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_4);
+
     // COMMON ANODE
 	uint32_t arr = __HAL_TIM_GET_AUTORELOAD(&htim2);
 
@@ -344,9 +335,17 @@ int main(void)
   MX_TIM15_Init();
   /* USER CODE BEGIN 2 */
 
-  //Init
+  //ADC Init
   ADC_Init();
+
+  //PDMS Init
+  WE_pdmsI2cExampleInit();
+
+  //Board Init
   Board_Init();
+  LOG_INFO("EV ON");
+
+
   uint32_t t_ev = 0;
   uint32_t t_cc = 0;
   uint32_t t_end = 0;
@@ -354,6 +353,9 @@ int main(void)
   uint8_t state = 0;
 
   uint8_t Fan_warn = 0;
+
+  float presskPa;
+  float tempDegC;
 
 
   //Start sound
@@ -368,15 +370,13 @@ int main(void)
 
   //Fans
   FAN_Init();
-  FanA_SetSpeed(AVERGAGE_FAN_SPEED);
-  FanB_SetSpeed(AVERGAGE_FAN_SPEED);
+  FanA_SetSpeed(AVERAGE_FAN_SPEED);
+  FanB_SetSpeed(AVERAGE_FAN_SPEED);
 
   //LED
   RGB_Init();
-  RGB_Set(0,100,200);
 
   //I2C
-  HAL_Delay(1000);
   I2C_Scan();
 
   /* USER CODE END 2 */
@@ -461,18 +461,19 @@ int main(void)
 
 	  //FAN warning
 	  if (Temp_1>TEMP_FAN_CRITIQUE || Temp_2 >TEMP_FAN_CRITIQUE){
-		  if(Temp_1 >50.0f)	LOG_WARN("Temperature 1 > 50 degres"); //TODO LED rouge !
+		  if(Temp_1 >50.0f)	LOG_WARN("Temperature 1 > 50 degres");
 		  if(Temp_2 >50.0f)	LOG_WARN("Temperature 2 > 50 degres");
 		  Fan_warn =1;
-		  FanA_SetSpeed(100);
-		  FanB_SetSpeed(100);
+		  FanA_SetSpeed(MAX_FAN_SPEED);
+		  FanB_SetSpeed(MAX_FAN_SPEED);
 
 	  }else if (Fan_warn==1 && Temp_1<TEMP_FAN_OK && Temp_2<TEMP_FAN_OK){
-		  FanA_SetSpeed(AVERGAGE_FAN_SPEED);
-		  FanB_SetSpeed(AVERGAGE_FAN_SPEED);
+		  FanA_SetSpeed(AVERAGE_FAN_SPEED);
+		  FanB_SetSpeed(AVERAGE_FAN_SPEED);
 		  Fan_warn =0;
 	  }
 
+	  Get_pdms(&presskPa, &tempDegC);
 
   }
   /* USER CODE END 3 */
