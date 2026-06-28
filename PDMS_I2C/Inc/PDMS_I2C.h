@@ -66,7 +66,7 @@ int8_t PDMS_I2C_GetRawPressureAndTemperature(WE_sensorInterface_t* sensorInterfa
 int8_t PDMS_I2C_GetRawPressureAndTemperature_WithCRC(WE_sensorInterface_t* sensorInterface, uint16_t* rawPressure, uint16_t* rawTemperature, uint16_t* syncStatusValue);
 int8_t PDMS_getPressureAndTemperature_float(WE_sensorInterface_t* sensorInterface, PDMS_SensorType_t type, float* pressureKPa, float* temperatureDegC, uint16_t* syncStatusValue);
 
-void WE_pdmsI2cExampleInit();
+void WE_pdmsI2cInit();
 void WE_pdmsI2cExampleLoop();
 
 void Get_pdms(float * presskPa, float * tempDegC );

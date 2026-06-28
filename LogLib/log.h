@@ -40,7 +40,7 @@ void LOG_Send(const char *buf, uint16_t len);
     char buf[LOG_BUF_SIZE]; \
     int len = snprintf(buf, sizeof(buf), "[WARN] " fmt "\r\n", ##__VA_ARGS__); \
     LOG_Send(buf, len); \
-    RGB_Set(255,80,0);\
+    RGB_Set(255,60,0);\
     HAL_Delay(200); \
     RGB_Set(0,0,0);\
 } while(0)

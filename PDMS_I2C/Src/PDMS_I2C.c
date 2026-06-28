@@ -31,11 +31,11 @@
  */
 #include "gpio.h"
 #include "i2c.h"
-#include "../Inc/PDMS_I2C.h"
+#include "PDMS_I2C.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include "../Inc/platform.h"
+#include "platform.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -385,8 +385,9 @@ int8_t PDMS_I2C_GetRawPressureAndTemperature_WithCRC(WE_sensorInterface_t* senso
     return WE_SUCCESS;
 }
 
-void WE_pdmsI2cExampleInit()
+void WE_pdmsI2cInit()
 {
+	/*
     char bufferMajor[4];
     char bufferMinor[4];
     sprintf(bufferMajor, "%d", WE_SENSOR_SDK_MAJOR_VERSION);
@@ -399,19 +400,10 @@ void WE_pdmsI2cExampleInit()
     debugPrintln("This example gives I2C measurement with CRC activated.");
     debugPrintln("Select the i2c address PDMS_I2C_ADDRESS in PDMS_init() function for measurement without CRC.");
     debugPrintln("Select the right pdms sensor type in PDMS_init() function. PDMS_pdus3 is selected as default.");
-
+*/
     /* init PDMS */
-    if (false == PDMS_init())
-    {
-        debugPrintln("**** PDMS_Init() error. STOP ****");
-        WE_Delay(5);
-        while (1)
-            ;
-    }
+    if (false == PDMS_init()) LOG_ERROR("PDMS_Init() error. STOP");
 
-    /* LED on */
-    //HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-    WE_Delay(5);
 }
 
 /**
