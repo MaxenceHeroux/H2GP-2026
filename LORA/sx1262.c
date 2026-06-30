@@ -227,49 +227,6 @@ static SX1262_Result_t sx1262_write_register(uint16_t addr, const uint8_t *data,
     return sx1262_wait_busy(500);
 }
 
-static SX1262_Result_t sx1262_read_register(uint16_t addr, uint8_t *data, uint8_t len)
-{
-    uint8_t tx[260];
-    uint8_t rx[260];
-
-    if (data == NULL || len == 0 || len > 255)
-    {
-        return SX1262_ERROR;
-    }
-
-    memset(tx, 0x00, sizeof(tx));
-    memset(rx, 0x00, sizeof(rx));
-
-    tx[0] = SX1262_CMD_READ_REGISTER;
-    tx[1] = (uint8_t)(addr >> 8);
-    tx[2] = (uint8_t)(addr & 0xFF);
-    tx[3] = 0x00;
-
-    SX1262_Result_t st = sx1262_wait_busy(500);
-    if (st != SX1262_OK) return st;
-
-    SX1262_NSS_LOW();
-
-    HAL_StatusTypeDef hal_st = HAL_SPI_TransmitReceive(
-        &SX1262_SPI_HANDLE,
-        tx,
-        rx,
-        len + 4,
-        100
-    );
-
-    SX1262_NSS_HIGH();
-
-    if (hal_st != HAL_OK)
-    {
-        return sx1262_hal_to_result(hal_st);
-    }
-
-    memcpy(data, &rx[4], len);
-
-    return SX1262_OK;
-}
-
 static SX1262_Result_t sx1262_write_buffer(uint8_t offset, const uint8_t *data, uint8_t len)
 {
     uint8_t tx[258];
