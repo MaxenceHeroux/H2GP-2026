@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include "log.h"
 /* -------------------------------------------------------------------------- */
 /* Commandes SX1262                                                            */
 /* -------------------------------------------------------------------------- */
@@ -728,7 +729,6 @@ SX1262_Result_t SX1262_Init(const SX1262_Config_t *cfg)
 
     return SX1262_OK;
 }
-
 SX1262_Result_t SX1262_Transmit(const uint8_t *payload, uint8_t len, uint32_t timeout_ms)
 {
     SX1262_Result_t st;
@@ -741,19 +741,39 @@ SX1262_Result_t SX1262_Transmit(const uint8_t *payload, uint8_t len, uint32_t ti
     }
 
     st = sx1262_set_standby(SX1262_STDBY_RC);
-    if (st != SX1262_OK) return st;
+    if (st != SX1262_OK)
+    {
+        sx1262_wait_busy(100);
+        return st;
+    }
 
     st = sx1262_set_lora_packet_params(len);
-    if (st != SX1262_OK) return st;
+    if (st != SX1262_OK)
+    {
+        sx1262_wait_busy(100);
+        return st;
+    }
 
     st = sx1262_set_buffer_base_address(0x00, 0x80);
-    if (st != SX1262_OK) return st;
+    if (st != SX1262_OK)
+    {
+        sx1262_wait_busy(100);
+        return st;
+    }
 
     st = sx1262_write_buffer(0x00, payload, len);
-    if (st != SX1262_OK) return st;
+    if (st != SX1262_OK)
+    {
+        sx1262_wait_busy(100);
+        return st;
+    }
 
     st = sx1262_clear_irq(SX1262_IRQ_ALL);
-    if (st != SX1262_OK) return st;
+    if (st != SX1262_OK)
+    {
+        sx1262_wait_busy(100);
+        return st;
+    }
 
     st = sx1262_set_dio_irq_params(
         SX1262_IRQ_TX_DONE | SX1262_IRQ_TIMEOUT,
@@ -761,29 +781,45 @@ SX1262_Result_t SX1262_Transmit(const uint8_t *payload, uint8_t len, uint32_t ti
         0x0000,
         0x0000
     );
-    if (st != SX1262_OK) return st;
+    if (st != SX1262_OK)
+    {
+        sx1262_wait_busy(100);
+        return st;
+    }
 
     sx1262_dio1_irq_pending = 0;
 
     st = sx1262_set_tx(timeout_ms);
-    if (st != SX1262_OK) return st;
+    if (st != SX1262_OK)
+    {
+        sx1262_wait_busy(100);
+        return st;
+    }
 
     start = HAL_GetTick();
 
     while ((HAL_GetTick() - start) < (timeout_ms + 500U))
     {
         st = sx1262_get_irq_status(&irq);
-        if (st != SX1262_OK) return st;
+        if (st != SX1262_OK)
+        {
+            sx1262_wait_busy(100);
+            return st;
+        }
 
         if (irq & SX1262_IRQ_TX_DONE)
         {
             sx1262_clear_irq(SX1262_IRQ_ALL);
+            /* resynchro avant de rendre la main, pour que l'appel suivant
+             * (meme sans delay) parte sur un module stable */
+            sx1262_wait_busy(100);
             return SX1262_OK;
         }
 
         if (irq & SX1262_IRQ_TIMEOUT)
         {
             sx1262_clear_irq(SX1262_IRQ_ALL);
+            sx1262_wait_busy(100);
             return SX1262_TIMEOUT;
         }
 
@@ -791,9 +827,9 @@ SX1262_Result_t SX1262_Transmit(const uint8_t *payload, uint8_t len, uint32_t ti
     }
 
     sx1262_clear_irq(SX1262_IRQ_ALL);
+    sx1262_wait_busy(100);
     return SX1262_TIMEOUT;
 }
-
 SX1262_Result_t SX1262_StartRxContinuous(uint8_t max_payload_len)
 {
     SX1262_Result_t st;
@@ -928,6 +964,7 @@ SX1262_Result_t SX1262_TransmitText64(const char *text, uint32_t timeout_ms)
 {
     uint8_t payload[64];
     size_t len;
+
 
     if (text == NULL)
     {

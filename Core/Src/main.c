@@ -359,42 +359,10 @@ int main(void)
   }
   LOG("==== FIN TEST ====");
 
-  /*
-  LOG("==== TEST SPI LORA ====");
-
+  //SX1262 Init
   if (SX1262_InitDefault() != SX1262_OK){
 	  LOG_ERROR("Init SX1262_OK");
   }
-
-  uint8_t msg[64];
-
-  for (uint8_t i = 0; i < 64; i++)
-  {
-      msg[i] = i;
-  }
-
-
-
-  for (uint8_t n = 0; n < 10; n++)
-  {
-      SX1262_Result_t ret;
-
-      ret = SX1262_Transmit(msg, 64, 5000);
-
-      if (ret == SX1262_OK)
-      {
-    	  LOG_INFO("TX_DONE\r\n");
-      }
-      else
-      {
-    	  LOG_INFO("TX_ERROR\r\n");
-      }
-
-      HAL_Delay(1000);
-  }
-
-  LOG_INFO("Fin test 10 paquets\r\n");
-*/
 
   //ADC Init
   ADC_Init();
@@ -558,21 +526,41 @@ int main(void)
 
 	  	  }
 
-/*
-	 SX1262_Result_t ret = SX1262_TransmitText64("Bonjour depuis STM32L476", 5000);
+	  SX1262_Result_t ret = SX1262_TransmitText64("Bonjour depuis STM32L476", 5000);
 
-	 if (ret == SX1262_OK)
-	 {
-		 LOG_INFO("Transmit TX recu");
-	 }
-	 else
-	 {
-		 LOG_ERROR("Erreur Transmit");
-	 }
+	  if (ret == SX1262_OK){
+	      LOG_INFO("Transmit TX recu");
+	  }else{
+	      LOG_ERROR("Erreur Transmit code=%d", ret);
+	  }
 
-	 HAL_Delay(1000);
-*/
+	  HAL_Delay(11);
 
+	  ret = SX1262_TransmitText64("A", 200);
+	  if (ret != SX1262_OK){
+	      LOG_ERROR("Erreur Transmit A code=%d", ret);
+	  }
+
+	  HAL_Delay(11);
+
+
+	  char payload[64];
+	  snprintf(payload, sizeof(payload), "T1:%d", 10);
+
+	  ret = SX1262_TransmitText64(payload, 200);
+	  if (ret != SX1262_OK){
+	      LOG_ERROR("Erreur Transmit payload code=%d", ret);
+	  }
+
+	  HAL_Delay(11);
+
+
+	  ret = SX1262_TransmitText64("C", 200);
+	  if (ret != SX1262_OK){
+	      LOG_ERROR("Erreur Transmit C code=%d", ret);
+	  }
+
+	  HAL_Delay(11);
 
   }
   /* USER CODE END 3 */
