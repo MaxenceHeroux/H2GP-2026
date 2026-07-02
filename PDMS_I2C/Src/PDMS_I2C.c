@@ -468,10 +468,15 @@ static bool PDMS_init(void)
 
     /* Wait for boot */
     WE_Delay(50);
-    while (WE_SUCCESS != WE_isSensorInterfaceReady(&pdms))
+    int i = 0;
+    while (WE_SUCCESS != WE_isSensorInterfaceReady(&pdms) && i<4)
     {
+    	i++;
+    	WE_Delay(10);
     }
-    debugPrintln("**** WE_isSensorInterfaceReady(): OK ****");
+    if( i > 2 ) {
+    	return false;
+    }
 
     return true;
 }

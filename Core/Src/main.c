@@ -62,21 +62,26 @@
 //--------------------------------------GENERAL TIMING-------------------------------------------
 #ifdef RACE
 //RACE no CC
-#define EV_OPEN_TIME 100
-#define EV_CC_WAIT 5000
+#define EV_OPEN_TIME 40
+#define EV_CC_WAIT 10000
 #define CC_EV_WAIT 5000
-#define CC_CLOSE_TIME 25
+#define CC_CLOSE_TIME 7
 #else
 //REGENERATION HORIZON'S TIMING
-#define EV_OPEN_TIME 500
-#define EV_CC_WAIT 5000
+//#define EV_OPEN_TIME 500
+//#define EV_CC_WAIT 5000
+//#define CC_EV_WAIT 5000
+//#define CC_CLOSE_TIME 100
+
+#define EV_OPEN_TIME 40
+#define EV_CC_WAIT 10000
 #define CC_EV_WAIT 5000
-#define CC_CLOSE_TIME 100
+#define CC_CLOSE_TIME 7
 #endif
 
-#define TEMP_FAN_CRITIQUE  50.0f
-#define TEMP_FAN_OK 35.0f
-#define AVERAGE_FAN_SPEED 80
+#define TEMP_FAN_CRITIQUE  51.0f
+#define TEMP_FAN_OK 50.0f
+#define AVERAGE_FAN_SPEED 50
 #define MAX_FAN_SPEED 100
 
 
@@ -87,7 +92,7 @@
 #define H30_ESC_ON()  HAL_GPIO_WritePin(H30_ESC_GPIO_Port, H30_ESC_Pin, GPIO_PIN_SET)
 #define H30_ESC_OFF()  HAL_GPIO_WritePin(H30_ESC_GPIO_Port, H30_ESC_Pin, GPIO_PIN_RESET)
 
-#define CC_ON()  HAL_GPIO_WritePin(CC_GPIO_Port, CC_Pin, GPIO_PIN_SET)
+//#define CC_ON()  HAL_GPIO_WritePin(CC_GPIO_Port, CC_Pin, GPIO_PIN_SET)
 #define CC_OFF()  HAL_GPIO_WritePin(CC_GPIO_Port, CC_Pin, GPIO_PIN_RESET)
 
 /* USER CODE END PM */
@@ -189,7 +194,6 @@ void PWM_SetFreq(TIM_HandleTypeDef *htim, uint32_t channel, uint32_t freq){
 
 
 
-
 void PWM_SetDuty(TIM_HandleTypeDef *htim,uint32_t channel, uint8_t duty_percent){
 	uint32_t arr = __HAL_TIM_GET_AUTORELOAD(htim);
 
@@ -287,56 +291,85 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	}
 }
 
+void CC_ON(){
+
+    __HAL_TIM_SET_AUTORELOAD(&htim7, 50000); //permet de choisir dynamique la valeur que le compteur doit attendre : temps = counter_value
+    __HAL_TIM_SET_COUNTER(&htim7, 0); // initialisation du compteur à 0
+    HAL_GPIO_WritePin(CC_GPIO_Port, CC_Pin, GPIO_PIN_SET);
+	HAL_TIM_Base_Start_IT(&htim7); // démarrage du timer
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ // Fonction à ajouter absolument
+	UNUSED(htim);
+    if(htim->Instance == TIM7){ // Selection du timer
+    	CC_OFF(); //Appeler ici votre fonction
+    	HAL_TIM_Base_Stop_IT(&htim7); // arrêt de l'interruption et desactivation du timer
+    }
+}
+
+
 /* USER CODE END 0 */
 
 /**
- * @brief  The application entry point.
- * @retval int
- */
+  * @brief  The application entry point.
+  * @retval int
+  */
 int main(void)
 {
 
-	/* USER CODE BEGIN 1 */
+  /* USER CODE BEGIN 1 */
 
-	/* USER CODE END 1 */
+  /* USER CODE END 1 */
 
-	/* MCU Configuration--------------------------------------------------------*/
+  /* MCU Configuration--------------------------------------------------------*/
 
-	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-	HAL_Init();
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
-	/* USER CODE BEGIN Init */
+  /* USER CODE BEGIN Init */
 
-	/* USER CODE END Init */
+  /* USER CODE END Init */
 
-	/* Configure the system clock */
-	SystemClock_Config();
+  /* Configure the system clock */
+  SystemClock_Config();
 
-	/* Configure the peripherals common clocks */
-	PeriphCommonClock_Config();
+  /* Configure the peripherals common clocks */
+  PeriphCommonClock_Config();
 
-	/* USER CODE BEGIN SysInit */
+  /* USER CODE BEGIN SysInit */
 
-	/* USER CODE END SysInit */
+  /* USER CODE END SysInit */
 
-	/* Initialize all configured peripherals */
-	MX_GPIO_Init();
-	MX_USB_DEVICE_Init();
-	MX_ADC1_Init();
-	MX_ADC3_Init();
-	MX_I2C1_Init();
-	MX_QUADSPI_Init();
-	MX_SPI1_Init();
-	MX_TIM1_Init();
-	MX_TIM2_Init();
-	MX_TIM3_Init();
-	MX_UART4_Init();
-	MX_USART3_UART_Init();
-	MX_UART5_Init();
-	MX_TIM8_Init();
-	MX_TIM15_Init();
-	/* USER CODE BEGIN 2 */
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_USB_DEVICE_Init();
+  MX_ADC1_Init();
+  MX_ADC3_Init();
+  MX_I2C1_Init();
+  MX_QUADSPI_Init();
+  MX_SPI1_Init();
+  MX_TIM1_Init();
+  MX_TIM2_Init();
+  MX_TIM3_Init();
+  MX_UART4_Init();
+  MX_USART3_UART_Init();
+  MX_UART5_Init();
+  MX_TIM8_Init();
+  MX_TIM15_Init();
+  MX_TIM7_Init();
+  MX_TIM6_Init();
+  /* USER CODE BEGIN 2 */
 
+	//LED
+	RGB_Init();
+
+	//Fans
+	FAN_Init();
+	FanA_SetSpeed(AVERAGE_FAN_SPEED);
+	FanB_SetSpeed(AVERAGE_FAN_SPEED);
+
+	//I2C
+	I2C_Scan();
 
 	LOG("==== TEST W25N01G JEDEC ID ====");
 
@@ -395,26 +428,18 @@ int main(void)
 	HAL_Delay(300);
 	HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3);
 
-	//Fans
-	FAN_Init();
-	FanA_SetSpeed(AVERAGE_FAN_SPEED);
-	FanB_SetSpeed(AVERAGE_FAN_SPEED);
 
-	//LED
-	RGB_Init();
+  /* USER CODE END 2 */
 
-	//I2C
-	I2C_Scan();
-
-	/* USER CODE END 2 */
-
-	/* Infinite loop */
-	/* USER CODE BEGIN WHILE */
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
 	while (1)
 	{
-		/* USER CODE END WHILE */
+    /* USER CODE END WHILE */
 
-		/* USER CODE BEGIN 3 */
+    /* USER CODE BEGIN 3 */
+
+
 
 		uint32_t now = HAL_GetTick();
 
@@ -484,6 +509,12 @@ int main(void)
 		uint32_t v_pc3_mv = (3300UL * adc_in3) / 4095UL;
 		uint32_t v_source_mv = (v_pc3_mv * (100UL + 20UL)) / 20UL;
 
+		//Tension H30
+		uint16_t adc_in4 = ADC_ReadChannel(&hadc3, ADC_CHANNEL_3);
+		uint32_t v_adc3ch3_mv = (3300UL * adc_in4) / 4095UL;
+		uint32_t v_source4_mv = (v_adc3ch3_mv * (100UL + 20UL)) / 20UL;
+
+
 
 		//FAN warning
 		if (Temp_1>TEMP_FAN_CRITIQUE || Temp_2 >TEMP_FAN_CRITIQUE){
@@ -499,15 +530,10 @@ int main(void)
 			Fan_warn =0;
 		}
 
-		/*
-	  LOG_INFO("Temp_1 %ld.%ld C",((int32_t)(Temp_1 * 10.0f)) / 10,labs(((int32_t)(Temp_1 * 10.0f)) % 10));
-	  LOG_INFO("Temp_2 %ld.%ld C",((int32_t)(Temp_2 * 10.0f)) / 10,labs(((int32_t)(Temp_2 * 10.0f)) % 10));
-	  LOG_INFO("Tension %lu mV", v_source_mv);
-	  LOG_INFO("Pression = %.2f uPa", presskPa);
-	  LOG_INFO("Temp_tube = %.2f C", tempDegC); //TODO signe -
-		 */
 
-		if ((HAL_GetTick() - t_temp) >= 50){
+
+
+		if ((HAL_GetTick() - t_temp) >= 20){
 			t_temp = HAL_GetTick();
 
 			//Pression PDMS
@@ -518,7 +544,9 @@ int main(void)
 			//LOG_INFO("NTC_BLANC %lu mV", (3300UL * adc_in2) / 4095UL);
 			LOG_INFO("Temp_2 %ld.%ld C",((int32_t)(Temp_2 * 10.0f)) / 10,labs(((int32_t)(Temp_2 * 10.0f)) % 10));
 
-			LOG_INFO("Tension %lu mV", v_source_mv);
+			LOG_INFO("Tension XT60%lu mV", v_source_mv);
+			LOG_INFO("Tension H30 %lu mV", v_source4_mv);
+
 
 			LOG_INFO("Pression = %.2f uPa", presskPa);
 			LOG_INFO("Temp_tube = %.2f C", tempDegC);
@@ -527,113 +555,115 @@ int main(void)
 
 			char msg[64];
 
-			/* Températures NTC : 1 décimale */
 			int32_t t1_i = (int32_t)(Temp_1 * 10.0f) / 10;
 			int32_t t1_d = labs((int32_t)(Temp_1 * 10.0f) % 10);
 
 			int32_t t2_i = (int32_t)(Temp_2 * 10.0f) / 10;
 			int32_t t2_d = labs((int32_t)(Temp_2 * 10.0f) % 10);
 
-			/* Pression et température tube : 2 décimales */
 			int32_t p_i  = (int32_t)(presskPa * 100.0f) / 100;
 			int32_t p_d  = labs((int32_t)(presskPa * 100.0f) % 100);
 
 			int32_t tt_i = (int32_t)(tempDegC * 100.0f) / 100;
 			int32_t tt_d = labs((int32_t)(tempDegC * 100.0f) % 100);
 
-			LORA("T1:%ld.%ld;T2:%ld.%ld;U:%lu;P:%ld.%02ld;Tt:%ld.%02ld",
+			LORA("T1:%ld.%ld;T2:%ld.%ld;U1:%lu;U2:%lu;P:%ld.%02ld;Tt:%ld.%02ld",
 					t1_i, t1_d,
 					t2_i, t2_d,
 					(unsigned long)v_source_mv,
+					(unsigned long)v_source4_mv,
 					p_i, p_d,
 					tt_i, tt_d);
 
-			LOG_INFO("LoRa TX: %s", msg);   /* pour vérifier au debug */
-
-			SX1262_Result_t ret = SX1262_TransmitText64(msg, 5000);
+			SX1262_Result_t ret = SX1262_TransmitText64(msg, 25);
 			if (ret == SX1262_OK){
 				LOG_INFO("Transmit data OK");
 			}else{
 				LOG_ERROR("Erreur Transmit data code=%d", ret);
 			}
+
+			//LORA("RANDOM:%d",10); //pas d espace ; pas d espace
+
+
 		}
 	}
 
-	/* USER CODE END 3 */
+
+  /* USER CODE END 3 */
 }
 
 /**
- * @brief System Clock Configuration
- * @retval None
- */
+  * @brief System Clock Configuration
+  * @retval None
+  */
 void SystemClock_Config(void)
 {
-	RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-	RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-	/** Configure the main internal regulator output voltage
-	 */
-	if (HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1) != HAL_OK)
-	{
-		Error_Handler();
-	}
+  /** Configure the main internal regulator output voltage
+  */
+  if (HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-	/** Initializes the RCC Oscillators according to the specified parameters
-	 * in the RCC_OscInitTypeDef structure.
-	 */
-	RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-	RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-	RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-	RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-	RCC_OscInitStruct.PLL.PLLM = 1;
-	RCC_OscInitStruct.PLL.PLLN = 10;
-	RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
-	RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
-	RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
-	if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-	{
-		Error_Handler();
-	}
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 1;
+  RCC_OscInitStruct.PLL.PLLN = 10;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
+  RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
+  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-	/** Initializes the CPU, AHB and APB buses clocks
-	 */
-	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-			|RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-	RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-	RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
-	RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
-	{
-		Error_Handler();
-	}
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /**
- * @brief Peripherals Common Clock Configuration
- * @retval None
- */
+  * @brief Peripherals Common Clock Configuration
+  * @retval None
+  */
 void PeriphCommonClock_Config(void)
 {
-	RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
-	/** Initializes the peripherals clock
-	 */
-	PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB|RCC_PERIPHCLK_ADC;
-	PeriphClkInit.AdcClockSelection = RCC_ADCCLKSOURCE_PLLSAI1;
-	PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLLSAI1;
-	PeriphClkInit.PLLSAI1.PLLSAI1Source = RCC_PLLSOURCE_HSE;
-	PeriphClkInit.PLLSAI1.PLLSAI1M = 1;
-	PeriphClkInit.PLLSAI1.PLLSAI1N = 12;
-	PeriphClkInit.PLLSAI1.PLLSAI1P = RCC_PLLP_DIV7;
-	PeriphClkInit.PLLSAI1.PLLSAI1Q = RCC_PLLQ_DIV4;
-	PeriphClkInit.PLLSAI1.PLLSAI1R = RCC_PLLR_DIV4;
-	PeriphClkInit.PLLSAI1.PLLSAI1ClockOut = RCC_PLLSAI1_48M2CLK|RCC_PLLSAI1_ADC1CLK;
-	if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
-	{
-		Error_Handler();
-	}
+  /** Initializes the peripherals clock
+  */
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB|RCC_PERIPHCLK_ADC;
+  PeriphClkInit.AdcClockSelection = RCC_ADCCLKSOURCE_PLLSAI1;
+  PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLLSAI1;
+  PeriphClkInit.PLLSAI1.PLLSAI1Source = RCC_PLLSOURCE_HSE;
+  PeriphClkInit.PLLSAI1.PLLSAI1M = 1;
+  PeriphClkInit.PLLSAI1.PLLSAI1N = 12;
+  PeriphClkInit.PLLSAI1.PLLSAI1P = RCC_PLLP_DIV7;
+  PeriphClkInit.PLLSAI1.PLLSAI1Q = RCC_PLLQ_DIV4;
+  PeriphClkInit.PLLSAI1.PLLSAI1R = RCC_PLLR_DIV4;
+  PeriphClkInit.PLLSAI1.PLLSAI1ClockOut = RCC_PLLSAI1_48M2CLK|RCC_PLLSAI1_ADC1CLK;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /* USER CODE BEGIN 4 */
@@ -641,33 +671,33 @@ void PeriphCommonClock_Config(void)
 /* USER CODE END 4 */
 
 /**
- * @brief  This function is executed in case of error occurrence.
- * @retval None
- */
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
 void Error_Handler(void)
 {
-	/* USER CODE BEGIN Error_Handler_Debug */
+  /* USER CODE BEGIN Error_Handler_Debug */
 	/* User can add his own implementation to report the HAL error return state */
 	__disable_irq();
 	while (1)
 	{
 	}
-	/* USER CODE END Error_Handler_Debug */
+  /* USER CODE END Error_Handler_Debug */
 }
 
 #ifdef  USE_FULL_ASSERT
 /**
- * @brief  Reports the name of the source file and the source line number
- *         where the assert_param error has occurred.
- * @param  file: pointer to the source file name
- * @param  line: assert_param error line source number
- * @retval None
- */
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
 void assert_failed(uint8_t *file, uint32_t line)
 {
-	/* USER CODE BEGIN 6 */
+  /* USER CODE BEGIN 6 */
 	/* User can add his own implementation to report the file name and line number,
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-	/* USER CODE END 6 */
+  /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
